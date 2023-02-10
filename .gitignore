@@ -1,0 +1,14 @@
+/.idea
+.idea
+/.ipynb_checkpoints
+.ipynb_checkpoints
+/__pycache__
+__pycache__
+.DS_Store
+/.DS_Store
+*tmp.*
+*test*
+.vscode
+/.vscode
+/Misc
+data
