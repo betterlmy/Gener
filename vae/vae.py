@@ -121,15 +121,15 @@ def train(num_epochs):
             train_kl_loss += kl_loss.item()
             
             optimizer.step()
-        print('Loss: {:.4f}'.format(train_loss / len(train_loader.dataset)))
-        print('Recon Loss: {:.4f}'.format(train_recon_loss / len(train_loader.dataset)))
-        print('KL Loss: {:.4f}'.format(train_kl_loss / len(train_loader.dataset)))
-        # 保存模型参数
-        torch.save(model.state_dict(), 'vae/vae_params.pt')
+        print('Loss: {:.2f}'.format(train_loss / len(train_loader.dataset)))
+        print('Recon Loss: {:.2f}'.format(train_recon_loss / len(train_loader.dataset)))
+        print('KL Loss: {:.2f}'.format(train_kl_loss / len(train_loader.dataset)))
         
-        # 生成临时图片
+        
         if (epoch+1) % 5 == 0 or epoch == 1:
-            generate_image(model,epoch+1)
+            generate_image(model,epoch+1)# 生成临时图片 
+            torch.save(model.state_dict(), 'vae/vae_params.pt')# 保存模型
+
 
 def generate_image(model,epoch):
     # 生成图片
@@ -145,7 +145,7 @@ def generate_image(model,epoch):
 
 
 def main():
-    num_epochs = 30
+    num_epochs = 100
     train(num_epochs)
     
     # 创建新的VAE模型，并加载模型参数
