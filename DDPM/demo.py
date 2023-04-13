@@ -4,11 +4,10 @@ import torch
 import torch.nn as nn
 import time
 import sys, os
+sys.path.append("/home/deng/dzn/l/Gener") # 添加当前路径到系统路径中
+from utils import *
 
-sys.path.append(os.getcwd())
-from lmy import *
-
-device = torch.device('cuda:6' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 
 ## 生成数据集
 s_curve, _ = make_s_curve(10 ** 4, noise=0.1)
@@ -16,17 +15,12 @@ s_curve = s_curve[:, [0, 2]] / 10.0
 
 data = s_curve.T  # [2,10000]
 dataset = torch.Tensor(s_curve).float()
-now_time = time.strftime("%m-%d-%H_%M_%S", time.localtime(time.time()))
 
-# 展示图像
-# fig,ax= plt.subplots()
-# ax.scatter(*data,c='r',edgecolors='w')
-# ax.axis('off')
-# plt.show()
+now_time = time.strftime("%m-%d-%H_%M_%S", time.localtime(time.time()))
 
 # 设置超参数
 with torch.no_grad():
-    num_steps = 100
+    num_steps = 500
     betas = torch.linspace(-6, 6, num_steps)
     betas = torch.sigmoid(betas)
     betas = betas * (5e-3 - 1e-5) + 1e-5  # 将betas张量中的每个值缩放到一个范围，这个范围是从1e-5到5e-3。
@@ -50,6 +44,7 @@ def q_x(x_0, t, one_minus_alphas_bar_sqrt=one_minus_alphas_bar_sqrt, alphas_bar_
 
 
 class MLPDiffusion(nn.Module):
+    # 基于MLP的多层感知机
 
     def __init__(self, n_steps, num_units=128) -> None:
         super().__init__()
@@ -57,13 +52,14 @@ class MLPDiffusion(nn.Module):
         self.linears = nn.ModuleList(
             [
                 nn.Linear(2, num_units),
-
                 nn.ReLU(),
-                nn.Linear(num_units, num_units),
-
-                nn.ReLU(),
+                
                 nn.Linear(num_units, num_units),
                 nn.ReLU(),
+                
+                nn.Linear(num_units, num_units),
+                nn.ReLU(),
+                
                 nn.Linear(num_units, 2)
             ]
         )
@@ -124,8 +120,8 @@ def p_sample(model, x, t, betas, one_minus_alphas_bar_sqrt):
 
 def p_sample_loop(model, shape, num_steps, betas, one_minus_alphas_bar_sqrt):
     """从x[T]中恢复x[T-1],x[T-2]...x[0]"""
-    cur_x = torch.randn(shape).to(device)
-    x_seq = [cur_x]
+    cur_x = torch.randn(shape).to(device) # X[T]
+    x_seq = [cur_x] # x_seq 是一个list,里面存放的是x[T],x[T-1],x[T-2]...x[0]
     for i in reversed(range(num_steps)):
         cur_x = p_sample(model, cur_x, i, betas, one_minus_alphas_bar_sqrt)
         x_seq.append(cur_x)
@@ -133,13 +129,16 @@ def p_sample_loop(model, shape, num_steps, betas, one_minus_alphas_bar_sqrt):
     return x_seq
 
 
+
+
 def train():
     batch_size = 128
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    num_epoch = 4000
+    num_epoch = 2000
     model = MLPDiffusion(num_steps).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-
+    save_info(dataset.shape,num_steps,num_epoch,f"MLPddpm/{now_time}",'train_log.txt')
+    
     for epoch in range(num_epoch):
         start_time = time.time()
         for idx, data in enumerate(dataloader):
@@ -147,18 +146,20 @@ def train():
             loss = diffusion_loss_fn(model, data, alphas_bar_sqrt, one_minus_alphas_bar_sqrt, num_steps)
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # ?
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # 用于解决梯度爆炸的问题,也就是梯度爆炸的解决方法.
             optimizer.step()
             end_time = time.time()
-        print('epoch:{}/{},loss:{},time:{:.5f}'.format(epoch, num_epoch, idx, loss.item(), end_time - start_time))
+        log = 'epoch:{}/{},loss:{:.3f},time:{:.2f}'.format(epoch, num_epoch, loss.item(), end_time - start_time)
+        print(log)
+        save_log(log,f"MLPddpm/{now_time}",'train_log.txt')
 
-        if epoch % 10 == 0:
-            save_model(model, dirname="MLPddpm", epoch=epoch, now_time=now_time)
+        if epoch % 50 == 0:
             x_seq = p_sample_loop(model, dataset.shape, num_steps, betas, one_minus_alphas_bar_sqrt)
-            for i in range(1, 11):
-                cur_x = x_seq[i * 10].detach()
-                save_image(cur_x.T.cpu(), dirname="MLPddpm", epoch=epoch, now_time=now_time)
-
+            cur_x = x_seq[num_steps].detach() 
+            save_scatter(cur_x.T.cpu(), dirname=f"MLPddpm/{now_time}/Pic", epoch=epoch)
+        if epoch % 500 == 0:
+            save_model(model, dirname=f"MLPddpm/{now_time}/Model", epoch=epoch)
+    save_log('finished'+time.strftime("%m-%d-%H_%M_%S", time.localtime(time.time())),f"MLPddpm/{now_time}",'train_log.txt')
 
 if __name__ == "__main__":
     train()
