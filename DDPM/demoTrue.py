@@ -1,26 +1,24 @@
 # 整理的DDPM代码
-from sklearn.datasets import make_s_curve
+
+import PIL
 import torch
 import torch.nn as nn
 import time
-import sys, os
+import sys
+import numpy as np
+from torch.utils import data
+from torch.utils.data import DataLoader
+
 sys.path.append("/home/deng/dzn/l/Gener") # 添加当前路径到系统路径中
 from utils import *
 
 device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 
-## 生成数据集
-s_curve, _ = make_s_curve(10 ** 4, noise=0.1)
-s_curve = s_curve[:, [0, 2]] / 10.0
-
-data = s_curve.T  # [2,10000]
-dataset = torch.Tensor(s_curve).float()
-
-now_time = time.strftime("%m-%d-%H_%M_%S", time.localtime(time.time()))
-
 # 设置超参数
 with torch.no_grad():
     num_steps = 500
+    batch_size = 128
+    num_epoch = 2000
     betas = torch.linspace(-6, 6, num_steps)
     betas = torch.sigmoid(betas)
     betas = betas * (5e-3 - 1e-5) + 1e-5  # 将betas张量中的每个值缩放到一个范围，这个范围是从1e-5到5e-3。
@@ -34,6 +32,17 @@ with torch.no_grad():
     one_minus_alphas_bar_log = torch.log(1 - alphas_prod).to(device)
     one_minus_alphas_bar_sqrt = torch.sqrt(1 - alphas_prod).to(device)
 
+## 生成数据集
+img = PIL.Image.open("/home/deng/dzn/l/Gener/DDPM/onePic/000007.jpg")
+img = img.convert("L")  # 转换为灰度图
+img = img.resize((512, 512))      # 调整图像大小
+# img.save("灰度图.png")
+img = np.array(img, dtype=np.float32) / 255.0    # 将像素值缩放到0到1之间的范围内
+# img = img.transpose((2, 0, 1))  # 转换为通道在前的形式，shape为[C, H, W]
+img = torch.from_numpy(img)     # 将图像数据转换为tensor
+dataset = data.TensorDataset(img.repeat(batch_size, 1, 1))
+
+now_time = time.strftime("%m-%d-%H_%M_%S", time.localtime(time.time()))
 
 def q_x(x_0, t, one_minus_alphas_bar_sqrt=one_minus_alphas_bar_sqrt, alphas_bar_sqrt=alphas_bar_sqrt):
     """
@@ -51,6 +60,7 @@ class MLPDiffusion(nn.Module):
 
         self.linears = nn.ModuleList(
             [
+                
                 nn.Linear(2, num_units),
                 nn.ReLU(),
                 
@@ -95,11 +105,13 @@ def diffusion_loss_fn(model, x_0, alphas_bar_sqrt, one_minus_alphas_bar_sqrt, n_
     t = t.unsqueeze(-1)  # shape = [batch_size,1] 升维操作
     t = t.to(device)
 
-    a = alphas_bar_sqrt[t].to(device)
+    # 采样两个batch_size维的超参数
+    a = alphas_bar_sqrt[t].squeeze(-1).to(device)
     am1 = one_minus_alphas_bar_sqrt[t].to(device)
 
-    e = torch.randn_like(x_0).to(device)  # 生成与x0同形状的随机张量(服从正态分布)
-    x = x_0 * a + e * am1
+    e = torch.randn_like(x_0).to(device)  # 生成与x0同形状的随机张量(服从正态分布) batch_size,512,512
+    x = x_0 * a
+    x +=  e * am1
 
     out = model(x, t.squeeze(-1))
 
@@ -132,17 +144,15 @@ def p_sample_loop(model, shape, num_steps, betas, one_minus_alphas_bar_sqrt):
 
 
 def train():
-    batch_size = 128
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    num_epoch = 2000
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     model = MLPDiffusion(num_steps).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    save_info(dataset.shape,num_steps,num_epoch,f"MLPddpm/{now_time}",'train_log.txt')
+    save_info(img.shape,num_steps,num_epoch,f"MLPddpm/{now_time}",'train_log.txt')
     
     for epoch in range(num_epoch):
         start_time = time.time()
         for idx, data in enumerate(dataloader):
-            data = data.to(device)
+            data = data[0].to(device)
             loss = diffusion_loss_fn(model, data, alphas_bar_sqrt, one_minus_alphas_bar_sqrt, num_steps)
             optimizer.zero_grad()
             loss.backward()

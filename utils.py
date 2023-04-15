@@ -39,7 +39,7 @@ def save_info(shape,num_steps,num_epoch,dirname,filename):
         os.makedirs(path)
     file_path = os.path.join(path, filename)
     with open(file_path,'w') as f:
-        f.write('shape: {}\n'.format(shape))
+        f.write('dataset: {}\n'.format(shape))
         f.write('num_steps: {}\n'.format(num_steps))
         f.write('num_epoch: {}\n'.format(num_epoch))
 
