@@ -36,12 +36,12 @@ with torch.no_grad():
     one_minus_alphas_bar_sqrt = torch.sqrt(1 - alphas_prod).to(device)
 
 
-# def q_x(x_0, t, one_minus_alphas_bar_sqrt=one_minus_alphas_bar_sqrt, alphas_bar_sqrt=alphas_bar_sqrt):
-#     """
-#     扩散过程,基于x0计算出任意时刻的采样x[t]
-#     """
-#     noise = torch.randn_like(x_0)  # 生成与x0同形状的随机张量(服从正态分布)
-#     return alphas_bar_sqrt[t] * x_0 + one_minus_alphas_bar_sqrt[t] * noise, noise
+def q_x(x_0, t, one_minus_alphas_bar_sqrt=one_minus_alphas_bar_sqrt, alphas_bar_sqrt=alphas_bar_sqrt):
+    """
+    扩散过程,基于x0计算出任意时刻的采样x[t]
+    """
+    noise = torch.randn_like(x_0)  # 生成与x0同形状的随机张量(服从正态分布)
+    return alphas_bar_sqrt[t] * x_0 + one_minus_alphas_bar_sqrt[t] * noise, noise
 
 
 class MLPDiffusion(nn.Module):
@@ -109,7 +109,7 @@ def diffusion_loss_fn(model, batch_data, alphas_bar_sqrt, one_minus_alphas_bar_s
 
     z = torch.randn_like(batch_data).to(device)  # 生成与x0同形状的随机张量(服从正态分布) 
     x_t = batch_data * a + z * am1 # 对batch_data进行扩散 t时刻不相同
-
+    # 128,512,512  512,512 t
     e = model(x_t, t.squeeze(-1)) # 送入模型，得到t时刻的不同维度随机噪声均值预测值
     '''
     x_t = batch_data * a + z * am1 是前向扩散的过程，用于计算t时刻的采样x[t]，其中z是服从标准正态分布的随机张量。
@@ -138,11 +138,11 @@ def p_sample(model, x, t, betas, one_minus_alphas_bar_sqrt):
     """从x[T]采样t时刻的重构值"""
     t = torch.tensor([t]).to(device)
     coeff = betas[t] / one_minus_alphas_bar_sqrt[t] 
-    eps_theta = model(x, t) # 得到噪声分布的均值和方差
+    eps_theta = model(x, t) # 得到噪声分布的均值
     mean = (1 / (1 - betas[t])) * (x - coeff * eps_theta) # 
     
     z = torch.randn_like(x)
-    sigma_t = betas[t].sqrt() # sigma_t
+    sigma_t = betas[t].sqrt() # sigma_t  imporoved DDPM 训练得到了sigma_t
     sample = mean + sigma_t * z # 重参数化技巧 
     return (sample)
 
