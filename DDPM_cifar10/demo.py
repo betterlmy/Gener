@@ -1,15 +1,17 @@
-import os
+import time
 import math
 from abc import abstractmethod
-from PIL import Image
-import requests
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from tqdm import tqdm
-import matplotlib.pyplot as plt
+import sys
+sys.path.append("/home/deng/dzn/l/Gener") # 添加当前路径到系统路径中
+from utils import *
+
+
+train_time = time.strftime("%m-%d-%H_%M_%S", time.localtime(time.time()))
 
 
 def timestep_embedding(timesteps, dim, max_period=10000):
@@ -483,16 +485,24 @@ def main():
             
             loss = gaussian_diffusion.train_losses(model, images, t)
             total_loss += loss.item()
-            #if step % 200 == 0:
-            #    print("Loss:", loss.item())
+            if step % 200 == 0:
+               print("训练中Loss:{:.6f}".format(loss.item()))
 
             loss.backward()
             optimizer.step()
         if epoch % 10 == 0:
-            print(f"Epoch {epoch}, Loss {total_loss/len(train_loader)}")
+            # print(f"Epoch {epoch}, Loss {total_loss/len(train_loader)}")
+            log = 'epoch:{}/{},meanloss:{:.3f}'.format(epoch, epochs, total_loss/len(train_loader))
+            print(log)
+            save_log(log,f"Unetddpm/{train_time}",'train_log.txt')
 
 if __name__ == "__main__":
     """
     V100
     """
+    save_info(1,1,1,f"Unetddpm/{train_time}","test")
+    save_log('train start at '+time.strftime("%m.%d,%H:%M:%S", time.localtime(time.time())),f"Unetddpm/{train_time}",'train_log.txt')
+    
     main()
+    
+    save_log('train finished at '+time.strftime("%m.%d,%H:%M:%S", time.localtime(time.time())),f"Unetddpm/{train_time}",'train_log.txt')
